@@ -239,21 +239,18 @@ void consumer_seq(CD** cds_array, int num_items, int expected_height)
 		delete[] cds_array;
 }
 
-//CD** producer_par(ListArray<CD>* cds, Random* rand){}
+CD** producer_par(ListArray<CD>* cds, Random* rand){
 
-//void consumer_par(CD** cds_array, int num_items, int expected_height){}
+}
+
+void consumer_par(CD** cds_array, int num_items, int expected_height){
+
+}
 
 void parallel(){
-	printf("parent: begin\n");
-	pthread_t c;
-	pthread_create(&c, NULL, test, NULL)
-	while (done == 0)
-	;
-	printf("parent: end\n");
+	
 }
 
 void* test(void* arg){
-	printf("child\n");
-	done = 1;
-	return NULL;
+	
 }
