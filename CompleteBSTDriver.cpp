@@ -43,8 +43,8 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 CD** producer_seq(ListArray<CD>* cds, Random* rand);
 void consumer_seq(CD** cds_array, int num_items, int expected_height);
-CD** producer_par(ListArray<CD>* cds, Random* rand);
-void consumer_par(CD** cds_array, int num_items, int expected_height);
+void* producer_par(void *arg);
+void* consumer_par(void *arg);
 void parallel();
 void test(void* arg);
 void deleteCDs(ListArray<CD>* list);
@@ -92,15 +92,12 @@ int main()
 //parallel solution: process trees in parallel
 	start = time(NULL);
 
-		printf("creating producer");
+		printf("creating producer\n");
 		pthread_t p, c;
 		pthread_create(&p, NULL, producer_par, producer_args);
-		printf("creating consumer")
+		printf("creating consumer\n");
 		pthread_create(&c, NULL, consumer_par, consumer_args);
-		printf("joining producer")
-		pthread_join();
-	
-	
+		thr_join();
 
 	end = time(NULL);
   	
@@ -113,20 +110,22 @@ int main()
 
    return 0;
 }
-//Puts CD** in the buffer
+//Puts CD** in the buffer, modified to increment num_trees_p
 void put(CD** cds_array)
 {
 	buffer[producer_index] = cds_array;
 	producer_index = (producer_index + 1) % BUFFER_SIZE;
 	buffer_count++;  //buffer fills up
+	num_trees_p; //to keep track of how far along we are
 }
 
-//Returns a CD double pointer and decrements as needed 
+//Returns a CD double pointer and decrements as needed,  modified to increment num_trees_c
 CD** get()
 {
 	CD** cds_array = buffer[consumer_index];
 	consumer_index = (consumer_index + 1) % BUFFER_SIZE;
 	buffer_count--;  //buffer empties out
+	num_trees_c++;//to keep track of how far along we are
 	return cds_array;
 }
 
@@ -248,37 +247,69 @@ void consumer_seq(CD** cds_array, int num_items, int expected_height)
 		delete[] cds_array;
 }
 
-CD** producer_par(ListArray<CD>* cds, Random* rand){
+void* producer_par(void *arg){
 	int i;
+
+	//argparsing
+	long args[2];
+	args[0] = *(long*) arg;
+	args[1] = *(long*) (arg + sizeof(long)); 
+
+	//main loop
 	for (int i = 1; i <= NUM_TREES; i++)
 	{
 		pthread_mutex_lock(&mutex);
+		printf("Producer has the lock!\n");
 		while(buffer_count == BUFFER_SIZE){
+			printf("Producer has gone to sleep...\n");
 			pthread_cond_wait(&empty, &mutex);
+			
 		}
-	    put(producer_seq(cds, rand));
+		printf("Attempting to put...\n");
+		//Error here, tries to access invalid memory...
+	    put(producer_seq( (ListArray<CD>*) args[0], (Random*) args[1]));
 		pthread_cond_signal(&full);
+		printf("Producer no longer has the lock!\n");
 		pthread_mutex_unlock(&mutex);
 	}
-
+	return NULL;
 }
 
-void consumer_par(CD** cds_array, int num_items, int expected_height){
+void* consumer_par(void *arg){
 	int i;
+
+	//argparsing here
+	int args[2];
+	args[0] = *(int*) arg;
+	args[1] = *(int*) arg + sizeof(int); 
+
+	//main loop
 	for (int i = 1; i <= NUM_TREES; i++)
 	{
 		pthread_mutex_lock(&mutex);
+		printf("Consumer has the lock!\n");
 		while(buffer_count == 0){
+			printf("Consumer has gone to sleep...\n");
 			pthread_cond_wait(&full, &mutex);
 		}
 		CD** tmp = get();
 		pthread_cond_signal(&empty);
+		printf("Consumer no longer has the lock!\n");
 		pthread_mutex_unlock(&mutex);
-		consumer_seq(tmp, num_items, expected_height);
+		printf("Attempting to consume...\n");
+		consumer_seq(tmp, args[0], args[1]);
 	}
+	return NULL;
 }
 
-void thr_join() {
-	Pthread_mutex_lock(&mutex);
-	while (done)
+void thr_join(){
+	pthread_mutex_lock(&mutex);
+	//Should spin and wait until both consumers and producers have gone through 
+	//a total of NUM_TREES trees 
+	while (num_trees_c != NUM_TREES && num_trees_p != NUM_TREES){
+		pthread_cond_wait(&empty, &mutex);
+	}
+	pthread_mutex_unlock(&mutex);
 }
+
+
